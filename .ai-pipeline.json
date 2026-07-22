@@ -41,6 +41,7 @@
     { "path": "docs/ARCHITECTURE.md", "description": "Module map: App, board logic, storage, useBoard hook, dnd-kit components" }
   ],
   "use_design": true,
+  "design_dir": "ai-design",
   "paths": {
     "notify": [
       "*.test.ts",
