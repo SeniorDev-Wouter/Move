@@ -96,11 +96,19 @@ export function createEngineChannel(handlers: EngineHandlers): EngineChannel {
     }
   }
 
+  // Record an actionEventId as seen (leader or follower) so dedup survives a
+  // leader handoff: a tab that observed an action on the wire will not re-apply
+  // it after being promoted, even if the previous leader died before acking.
+  const remember = (actionEventId: string): void => {
+    if (processed.has(actionEventId)) return
+    processed.add(actionEventId)
+    setTimeout(() => processed.delete(actionEventId), PROCESSED_TTL_MS)
+  }
+
   const applyOnce = (msg: ActionMsg): void => {
     if (processed.has(msg.actionEventId)) return
-    processed.add(msg.actionEventId)
+    remember(msg.actionEventId)
     handlers.onAction?.(msg)
-    setTimeout(() => processed.delete(msg.actionEventId), PROCESSED_TTL_MS)
   }
 
   const armFailover = (): void => {
@@ -193,9 +201,13 @@ export function createEngineChannel(handlers: EngineHandlers): EngineChannel {
         if (!leader) startElection()
         break
       case 'action':
-        if (!leader) break
-        if (!processed.has(msg.actionEventId)) applyOnce(msg)
-        post({ type: 'ack', actionEventId: msg.actionEventId })
+        if (leader) {
+          applyOnce(msg) // records + applies once; a duplicate just re-acks
+          post({ type: 'ack', actionEventId: msg.actionEventId })
+        } else {
+          // Followers record the id on the wire so a future leader won't re-apply it.
+          remember(msg.actionEventId)
+        }
         break
       case 'ack': {
         const entry = pending.get(msg.actionEventId)

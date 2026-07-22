@@ -120,7 +120,7 @@ describe('createEngineChannel election', () => {
 })
 
 describe('createEngineChannel action relay', () => {
-  it('applies a relayed action exactly once across a leader death and retry', () => {
+  it('applies a relayed action once and stops retrying once acked', () => {
     ids = ['a', 'b', 'c', 'evt1']
     const applied: ActionMsg[] = []
     const onAction = (msg: ActionMsg) => applied.push(msg)
@@ -130,19 +130,49 @@ describe('createEngineChannel action relay', () => {
     vi.advanceTimersByTime(ELECTION_MS + 10)
     expect(a.isLeader()).toBe(true)
 
-    // Leader dies before it can process anything; C relays regardless.
-    FakeBroadcastChannel.instances[0].kill()
     c.relayAction({ action: 'done', occurrenceId: 'occ1', exerciseId: 'ex1' })
-
-    // Failover promotes B, whose first received retry applies the action.
-    vi.advanceTimersByTime(FAILOVER_MS + ELECTION_MS + RETRY_MS + 50)
-    expect(b.isLeader()).toBe(true)
+    // Leader A applies synchronously on receipt and acks; C stops retrying.
     expect(applied).toHaveLength(1)
     expect(applied[0].actionEventId).toBe('evt1')
 
-    // Continued retries must not double-apply.
+    vi.advanceTimersByTime(RETRY_MS * 3)
+    expect(applied).toHaveLength(1)
+
+    a.close()
+    b.close()
+    c.close()
+  })
+
+  it('does not re-apply a relayed action after the applying leader dies mid-processing', () => {
+    ids = ['a', 'b', 'c', 'evt1']
+    const applied: ActionMsg[] = []
+    // A applies, then dies inside the same handler — before its ack can reach
+    // C — modelling a leader crash mid-processing. C keeps retrying.
+    const onActionA = (msg: ActionMsg) => {
+      applied.push(msg)
+      FakeBroadcastChannel.instances[0].kill()
+    }
+    const onActionOther = (msg: ActionMsg) => applied.push(msg)
+    const a = createEngineChannel({ onAction: onActionA })
+    const b = createEngineChannel({ onAction: onActionOther })
+    const c = createEngineChannel({ onAction: onActionOther })
+    vi.advanceTimersByTime(ELECTION_MS + 10)
+    expect(a.isLeader()).toBe(true)
+
+    // A receives + applies + dies; B observes the same action on the wire.
+    c.relayAction({ action: 'done', occurrenceId: 'occ1', exerciseId: 'ex1' })
+    expect(applied).toHaveLength(1)
+
+    // B fails over and receives C's retries, but must NOT re-apply evt1.
+    vi.advanceTimersByTime(FAILOVER_MS + ELECTION_MS + RETRY_MS + 50)
+    expect(b.isLeader()).toBe(true)
+    expect(applied).toHaveLength(1)
+
     vi.advanceTimersByTime(RETRY_MS * 5)
     expect(applied).toHaveLength(1)
+
+    b.close()
+    c.close()
   })
 })
 
