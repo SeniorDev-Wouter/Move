@@ -6,7 +6,7 @@
   "pipeline": {
     "plan_model": "opus",
     "review_model": "opus",
-    "max_plan_revisions": 2,
+    "max_plan_revisions": 15,
     "steps": {
       "plan": true,
       "plan-review": true,
@@ -40,7 +40,7 @@
     { "path": "docs/FEATURES.md", "description": "User-facing feature list for the Kanban board (add/drag/priority/delete, persistence)" },
     { "path": "docs/ARCHITECTURE.md", "description": "Module map: App, board logic, storage, useBoard hook, dnd-kit components" }
   ],
-  "use_design": false,
+  "use_design": true,
   "paths": {
     "notify": [
       "*.test.ts",
@@ -63,13 +63,18 @@
   },
   "worker": {
     "model": "sonnet",
-    "max_parallel": 2,
-    "max_turns": 80,
-    "max_budget_usd": 3,
+    "max_parallel": 10,
+    "max_turns": 400,
+    "max_retries": 10,
+    "max_budget_usd": 20,
     "by_size": {
-      "L": { "model": "opus", "max_budget_usd": 6, "max_turns": 120 }
+      "L": { "model": "opus", "max_budget_usd": 30, "max_turns": 500 }
     },
-    "skills": ["react"],
+      "skills": ["react"],
+      "types": {
+  "frontend": { "description": "...Tailwind CSS...", "skills": ["react", ".aip/skills/tailwind.md"], "allow": [] },
+  "backend":  { "description": "...TypeScript...",   "skills": ["node", ".aip/skills/typescript.md"], "allow": [] }
+      },
     "allow": [
       "Bash(npm:*)",
       "Bash(node:*)",
@@ -92,7 +97,7 @@
     "pre_finish": ["npm run lint", "npm run build"],
     "steps": {
       "code-review": { "enabled": true, "model": "sonnet" },
-      "conflict-resolver": { "enabled": true, "model": "sonnet", "max_retries": 1 },
+      "conflict-resolver": { "enabled": true, "model": "sonnet", "max_retries": 3 },
       "feedback": { "enabled": true, "model": "opus" }
     },
     "extra_rules": ""
