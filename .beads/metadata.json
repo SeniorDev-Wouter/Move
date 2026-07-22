@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "taskflowtest",
+  "project_id": "10f5b8f1-2cf5-446a-9cd3-d81d9f641e00"
+}
