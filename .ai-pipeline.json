@@ -1,5 +1,5 @@
 {
-  "trusted_ref": "main",
+  "trusted_ref": "master",
   "auto_merge": true,
   "guarded_review": "final",
   "dashboard": { "port": 4177, "auto_open": true },
