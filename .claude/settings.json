@@ -11,5 +11,38 @@
         "matcher": ""
       }
     ]
+  },
+  "permissions": {
+    "deny": [
+      "Bash(aip init:*)",
+      "Bash(claude:*)",
+      "Bash(git branch -D:*)",
+      "Bash(git branch -d:*)",
+      "Bash(git checkout:*)",
+      "Bash(git merge:*)",
+      "Bash(git push:*)",
+      "Bash(git rebase:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git switch:*)",
+      "Bash(git worktree:*)",
+      "Edit(./.ai-pipeline.json)",
+      "Edit(./.ai-pipeline.json/**)",
+      "Edit(./.claude)",
+      "Edit(./.claude/**)",
+      "Edit(./.env)",
+      "Edit(./.env*)",
+      "Edit(./.env.local)",
+      "Edit(./.env.local/**)",
+      "Edit(./.env/**)",
+      "Write(./.ai-pipeline.json)",
+      "Write(./.ai-pipeline.json/**)",
+      "Write(./.claude)",
+      "Write(./.claude/**)",
+      "Write(./.env)",
+      "Write(./.env*)",
+      "Write(./.env.local)",
+      "Write(./.env.local/**)",
+      "Write(./.env/**)"
+    ]
   }
 }
