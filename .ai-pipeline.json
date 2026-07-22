@@ -7,6 +7,7 @@
     "plan_model": "opus",
     "review_model": "opus",
     "max_plan_revisions": 15,
+    "min_tickets": 50,
     "steps": {
       "plan": true,
       "plan-review": true,
