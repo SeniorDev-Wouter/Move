@@ -1,0 +1,100 @@
+{
+  "trusted_ref": "main",
+  "auto_merge": true,
+  "guarded_review": "final",
+  "dashboard": { "port": 4177, "auto_open": true },
+  "pipeline": {
+    "plan_model": "opus",
+    "review_model": "opus",
+    "max_plan_revisions": 2,
+    "steps": {
+      "plan": true,
+      "plan-review": true,
+      "design-review": true,
+      "tickets": true,
+      "ticket-review": true,
+      "workers": true,
+      "cleanup": true,
+      "docs": true,
+      "docs-review": true
+    }
+  },
+  "worktrees_dir": ".worktrees",
+  "exec": [],
+  "env_files": [],
+  "provision": {
+    "copy": ["node_modules"],
+    "run": ["npm install"]
+  },
+  "targeted_tests": "npm test --",
+  "gates": [
+    { "name": "lint", "run": "npm run lint" },
+    { "name": "typecheck+build", "run": "npm run build" },
+    {
+      "name": "changed-tests",
+      "run": "npm test -- {changed}",
+      "changed_paths": ["*.test.ts", "*.test.tsx", "src/test/"]
+    }
+  ],
+  "docs": [
+    { "path": "docs/FEATURES.md", "description": "User-facing feature list for the Kanban board (add/drag/priority/delete, persistence)" },
+    { "path": "docs/ARCHITECTURE.md", "description": "Module map: App, board logic, storage, useBoard hook, dnd-kit components" }
+  ],
+  "use_design": false,
+  "paths": {
+    "notify": [
+      "*.test.ts",
+      "*.test.tsx",
+      "src/test/",
+      "vite.config.ts",
+      "package.json",
+      "package-lock.json",
+      ".oxlintrc.json",
+      "tsconfig.json",
+      "tsconfig.app.json",
+      "tsconfig.node.json"
+    ],
+    "forbidden": [
+      ".env",
+      ".env.local",
+      ".claude/",
+      ".ai-pipeline.json"
+    ]
+  },
+  "worker": {
+    "model": "sonnet",
+    "max_parallel": 2,
+    "max_turns": 80,
+    "max_budget_usd": 3,
+    "by_size": {
+      "L": { "model": "opus", "max_budget_usd": 6, "max_turns": 120 }
+    },
+    "skills": ["react"],
+    "allow": [
+      "Bash(npm:*)",
+      "Bash(node:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git checkout:*)",
+      "Bash(git restore:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)",
+      "Bash(find:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)"
+    ],
+    "pre_finish": ["npm run lint", "npm run build"],
+    "steps": {
+      "code-review": { "enabled": true, "model": "sonnet" },
+      "conflict-resolver": { "enabled": true, "model": "sonnet", "max_retries": 1 },
+      "feedback": { "enabled": true, "model": "opus" }
+    },
+    "extra_rules": ""
+  }
+}
