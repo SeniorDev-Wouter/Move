@@ -79,6 +79,25 @@ describe('eligiblePool', () => {
     const pool = eligiblePool(state)
     expect(pool.length).toBeGreaterThan(0)
   })
+
+  it('excludes exactly the exercise marked deleted while keeping the rest', () => {
+    const state = createDefaultState()
+    const before = eligiblePool(state)
+    expect(before.length).toBeGreaterThan(1)
+    const target = before[0]
+    target.deleted = true
+    const after = eligiblePool(state)
+    expect(after.some((e) => e.id === target.id)).toBe(false)
+    expect(after.length).toBe(before.length - 1)
+  })
+
+  it('drops a deleted exercise that would otherwise be eligible', () => {
+    const state = createDefaultState()
+    const deletedEx = ex({ id: 'deleted-1', deleted: true })
+    state.exercises = [...state.exercises, deletedEx]
+    const pool = eligiblePool(state)
+    expect(pool.some((e) => e.id === 'deleted-1')).toBe(false)
+  })
 })
 
 describe('selectNext', () => {
