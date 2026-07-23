@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   SITTING_BREAKS_SOURCE,
   dedupeHistory,
+  deriveActivity,
   deriveStats,
   estActiveMinutes,
   trimHistory,
@@ -101,6 +102,69 @@ describe('deriveStats', () => {
     expect(stats.sittingBreaks).toBe(stats.done)
     expect(stats.estActiveMinutes).toBe(estActiveMinutes(stats.done))
     expect(stats.estActiveMinutes).toBe(2)
+  })
+})
+
+describe('deriveActivity', () => {
+  it('groups retained done entries by exerciseId with counts', () => {
+    const history: HistoryEntry[] = Array.from({ length: 4 }, (_, i) => ({
+      id: `d-${i}`,
+      occurrenceId: `o-${i}`,
+      exerciseId: 'ex-a',
+      action: 'done' as const,
+      at: 1000 + i * 20000,
+    }))
+    const activity = deriveActivity(emptyRollup, history, 200000)
+    expect(activity.perExercise).toEqual([{ exerciseId: 'ex-a', count: 4 }])
+  })
+
+  it('sorts the log most-recent-first and caps it', () => {
+    const history: HistoryEntry[] = Array.from({ length: 5 }, (_, i) => ({
+      id: `e-${i}`,
+      occurrenceId: `o-${i}`,
+      exerciseId: `ex-${i}`,
+      action: 'done' as const,
+      at: 1000 + i * 20000,
+    }))
+    const activity = deriveActivity(emptyRollup, history, 200000, 3)
+    expect(activity.log).toHaveLength(3)
+    expect(activity.log.map((e) => e.at)).toEqual([1000 + 80000, 1000 + 60000, 1000 + 40000])
+  })
+
+  it('respects trimmedThroughAt for both outputs', () => {
+    const rollup: Rollup = { done: 0, ignored: 0, doneDayKeys: [], trimmedThroughAt: 1500 }
+    const history: HistoryEntry[] = [
+      { id: 'a', occurrenceId: 'o1', exerciseId: 'ex-a', action: 'done', at: 1000 },
+      { id: 'b', occurrenceId: 'o2', exerciseId: 'ex-b', action: 'done', at: 2000 },
+    ]
+    const activity = deriveActivity(rollup, history, 3000)
+    expect(activity.perExercise).toEqual([{ exerciseId: 'ex-b', count: 1 }])
+    expect(activity.log).toEqual([{ exerciseId: 'ex-b', action: 'done', at: 2000 }])
+  })
+
+  it('applies the same dedupe rules as deriveStats', () => {
+    const history: HistoryEntry[] = [
+      { id: 'a', occurrenceId: 'o1', exerciseId: 'ex-a', action: 'done', at: 1000 },
+      { id: 'b', occurrenceId: 'o2', exerciseId: 'ex-a', action: 'done', at: 1000 + 5000 },
+    ]
+    const activity = deriveActivity(emptyRollup, history, 10000)
+    expect(activity.perExercise).toEqual([{ exerciseId: 'ex-a', count: 1 }])
+    expect(activity.log).toEqual([{ exerciseId: 'ex-a', action: 'done', at: 1000 }])
+  })
+
+  it('excludes snooze and shuffle from both outputs', () => {
+    const history: HistoryEntry[] = [
+      { id: 'a', occurrenceId: 'o1', exerciseId: 'ex-a', action: 'done', at: 1000 },
+      { id: 'b', occurrenceId: 'o2', exerciseId: 'ex-b', action: 'skip', at: 2000 },
+      { id: 'c', occurrenceId: 'o3', exerciseId: 'ex-c', action: 'snooze', at: 3000 },
+      { id: 'd', occurrenceId: 'o4', exerciseId: 'ex-d', action: 'shuffle', at: 4000 },
+    ]
+    const activity = deriveActivity(emptyRollup, history, 5000)
+    expect(activity.perExercise).toEqual([{ exerciseId: 'ex-a', count: 1 }])
+    expect(activity.log).toEqual([
+      { exerciseId: 'ex-b', action: 'skip', at: 2000 },
+      { exerciseId: 'ex-a', action: 'done', at: 1000 },
+    ])
   })
 })
 

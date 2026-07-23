@@ -1,4 +1,4 @@
-import type { HistoryEntry, MoveState, Rollup } from './types'
+import type { HistoryEntry, MoveState, ReminderAction, Rollup } from './types'
 import { DEDUPE_WINDOW_MS, HISTORY_CAP, localDayKey, pruneDoneDayKeys } from './catalog'
 
 export const SITTING_BREAKS_SOURCE = 'Diaz et al., Annals of Internal Medicine, 2017'
@@ -90,6 +90,29 @@ export function deriveStats(
     estActiveMinutes: estActiveMinutes(done),
     source: SITTING_BREAKS_SOURCE,
   }
+}
+
+export function deriveActivity(
+  rollup: Rollup,
+  history: HistoryEntry[],
+  _now?: number,
+  cap = 50,
+): {
+  perExercise: { exerciseId: string; count: number }[]
+  log: { exerciseId: string; action: ReminderAction; at: number }[]
+} {
+  const retained = dedupeHistory(history.filter((e) => e.at > rollup.trimmedThroughAt))
+  const counts = new Map<string, number>()
+  for (const e of retained) {
+    if (e.action === 'done') counts.set(e.exerciseId, (counts.get(e.exerciseId) ?? 0) + 1)
+  }
+  const perExercise = Array.from(counts, ([exerciseId, count]) => ({ exerciseId, count }))
+  const log = retained
+    .filter((e) => e.action === 'done' || e.action === 'skip')
+    .sort((a, b) => b.at - a.at)
+    .slice(0, cap)
+    .map((e) => ({ exerciseId: e.exerciseId, action: e.action, at: e.at }))
+  return { perExercise, log }
 }
 
 /** The local day key exactly one calendar day before the given key. */
