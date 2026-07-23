@@ -52,6 +52,35 @@ describe('loadState', () => {
     // Invalid entries were dropped.
     expect(loaded.exercises.find((e) => e.id === 'bad')).toBeUndefined()
   })
+
+  it('keeps a soft-deleted built-in deleted after the defaults re-merge', () => {
+    const defaults = createDefaultState()
+    const builtIn = defaults.exercises.find((e) => e.id === 'ex-neck-rolls')
+    if (!builtIn) throw new Error('fixture missing ex-neck-rolls')
+    const stored = {
+      ...defaults,
+      exercises: [{ ...builtIn, deleted: true, updatedAt: 100 }],
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(stored))
+    const loaded = loadState()
+    const found = loaded.exercises.find((e) => e.id === 'ex-neck-rolls')
+    expect(found?.deleted).toBe(true)
+  })
+
+  it('accepts exercises with deleted true or absent, rejects a non-boolean deleted', () => {
+    const withDeletedTrue = customExercise({ id: 'ex-a', deleted: true })
+    const withDeletedAbsent = customExercise({ id: 'ex-b' })
+    const withBadDeleted = { ...customExercise({ id: 'ex-c' }), deleted: 'yes' }
+    const stored = {
+      ...createDefaultState(),
+      exercises: [withDeletedTrue, withDeletedAbsent, withBadDeleted],
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(stored))
+    const loaded = loadState()
+    expect(loaded.exercises.find((e) => e.id === 'ex-a')?.deleted).toBe(true)
+    expect(loaded.exercises.find((e) => e.id === 'ex-b')).toBeTruthy()
+    expect(loaded.exercises.find((e) => e.id === 'ex-c')).toBeUndefined()
+  })
 })
 
 describe('mergeState', () => {
@@ -111,6 +140,24 @@ describe('mergeState', () => {
     b.settings = { ...b.settings, updatedAt: 9999 }
     const merged = mergeState(a, b)
     expect(merged.exercises.find((e) => e.id === 'ex-custom')).toBeTruthy()
+  })
+
+  it('a deleted exercise with a newer updatedAt wins over a non-deleted older copy', () => {
+    const older = customExercise({ updatedAt: 100 })
+    const newer = customExercise({ deleted: true, updatedAt: 300 })
+    const a = { ...baseState(), exercises: [older] }
+    const b = { ...baseState(), exercises: [newer] }
+    const merged = mergeState(a, b)
+    expect(merged.exercises.find((e) => e.id === 'ex-custom')?.deleted).toBe(true)
+  })
+
+  it('a non-deleted exercise with a newer updatedAt wins over a deleted older copy', () => {
+    const older = customExercise({ deleted: true, updatedAt: 100 })
+    const newer = customExercise({ updatedAt: 300 })
+    const a = { ...baseState(), exercises: [older] }
+    const b = { ...baseState(), exercises: [newer] }
+    const merged = mergeState(a, b)
+    expect(merged.exercises.find((e) => e.id === 'ex-custom')?.deleted).toBeUndefined()
   })
 
   it('keeps the greater trimmedThroughAt rollup', () => {
