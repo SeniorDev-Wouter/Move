@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  BUILTIN_EXERCISES,
   PLACEHOLDER_IMAGE,
   axisOf,
   createDefaultState,
@@ -35,6 +36,32 @@ describe('isSafeImage', () => {
     expect(isSafeImage('data:image/svg,<svg/>')).toBe(false)
     expect(isSafeImage('data:,nothing')).toBe(false)
   })
+
+  it('rejects built-in exercise image URLs (they bypass this check)', () => {
+    expect(isSafeImage('/Move/exercises/neck-rolls.jpg')).toBe(false)
+  })
+})
+
+describe('BUILTIN_EXERCISES images', () => {
+  const expectedFiles: Record<string, string> = {
+    'ex-neck-rolls': 'exercises/neck-rolls.jpg',
+    'ex-shoulder-shrugs': 'exercises/shoulder-shrugs.jpg',
+    'ex-seated-marches': 'exercises/seated-marches.jpg',
+    'ex-calf-raises': 'exercises/calf-raises.jpg',
+    'ex-wrist-stretches': 'exercises/wrist-stretches.jpg',
+    'ex-seated-twists': 'exercises/seated-spinal-twists.webp',
+    'ex-desk-pushups': 'exercises/desk-pushups.jpg',
+    'ex-ankle-circles': 'exercises/ankle-circles.png',
+  }
+
+  for (const [id, file] of Object.entries(expectedFiles)) {
+    it(`resolves ${id} to its BASE_URL-qualified asset`, () => {
+      const exercise = BUILTIN_EXERCISES.find((e) => e.id === id)
+      if (!exercise) throw new Error(`missing built-in exercise ${id}`)
+      expect(exercise.image.startsWith(import.meta.env.BASE_URL)).toBe(true)
+      expect(exercise.image).toContain(file)
+    })
+  }
 })
 
 describe('axisOf', () => {
