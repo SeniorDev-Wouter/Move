@@ -12,6 +12,7 @@ export type Exercise = {
   image: string
   tags: string[]
   custom: boolean
+  deleted?: boolean
   updatedAt: number
 }
 

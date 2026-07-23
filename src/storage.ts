@@ -147,6 +147,7 @@ function isExercise(v: unknown): v is Exercise {
     isString(v.image) &&
     isStringArray(v.tags) &&
     typeof v.custom === 'boolean' &&
+    (v.deleted === undefined || typeof v.deleted === 'boolean') &&
     isFiniteNumber(v.updatedAt)
   )
 }
