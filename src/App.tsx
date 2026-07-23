@@ -5,6 +5,7 @@ import { eligiblePool } from './selection'
 import { deriveStats, deriveActivity } from './progress'
 import { RetroWindow } from './components/RetroWindow'
 import { Assistant } from './components/Assistant'
+import { CountdownTimer } from './components/CountdownTimer'
 import { SettingsPanel } from './components/SettingsPanel'
 import { LoadoutLibrary } from './components/LoadoutLibrary'
 import { ExerciseCatalog } from './components/ExerciseCatalog'
@@ -78,6 +79,11 @@ function App() {
     <div className="desktop">
       <RetroWindow title="Move">
         <Assistant current={engine.current} notice={notice} onAction={engine.handleAction} />
+        <CountdownTimer
+          nextFireAt={engine.nextFireAt}
+          running={engine.running}
+          current={engine.current}
+        />
 
         <div className="workspace">
           <SettingsPanel
