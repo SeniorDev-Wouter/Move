@@ -37,7 +37,7 @@
     }
   ],
   "docs": [
-    { "path": "docs/FEATURES.md", "description": "User-facing feature list for the Kanban board (add/drag/priority/delete, persistence)" },
+    { "path": "docs/FEATURES.md", "description": "User-facing feature list for the move app" },
     { "path": "docs/ARCHITECTURE.md", "description": "Module map: App, board logic, storage, useBoard hook, dnd-kit components" }
   ],
   "use_design": true,
