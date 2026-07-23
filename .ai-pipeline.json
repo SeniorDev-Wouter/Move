@@ -24,8 +24,7 @@
   "exec": [],
   "env_files": [],
   "provision": {
-    "copy": ["node_modules"],
-    "run": ["npm install"]
+    "copy": ["node_modules"]
   },
   "targeted_tests": "npm test --",
   "gates": [
