@@ -9,6 +9,8 @@ type ExerciseCatalogProps = {
   tags: TagDef[]
   eligibleIds: Set<string>
   onAddExercise: (draft: ExerciseDraft) => void
+  onUpdateExercise: (id: string, draft: ExerciseDraft) => void
+  onDeleteExercise: (id: string) => void
   onAddTag: (name: string, axis: TagAxis) => void
 }
 
@@ -18,7 +20,16 @@ function byteLength(s: string): number {
   return new TextEncoder().encode(s).length
 }
 
-export function ExerciseCatalog({ exercises, tags, eligibleIds, onAddExercise, onAddTag }: ExerciseCatalogProps) {
+export function ExerciseCatalog({
+  exercises,
+  tags,
+  eligibleIds,
+  onAddExercise,
+  onUpdateExercise,
+  onDeleteExercise,
+  onAddTag,
+}: ExerciseCatalogProps) {
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [instructions, setInstructions] = useState('')
   const [targetKind, setTargetKind] = useState<ExerciseTarget['kind']>('reps')
@@ -28,6 +39,27 @@ export function ExerciseCatalog({ exercises, tags, eligibleIds, onAddExercise, o
   const [imageError, setImageError] = useState<string | null>(null)
   const [mintName, setMintName] = useState('')
   const [mintAxis, setMintAxis] = useState<TagAxis>('type')
+
+  const startEdit = (ex: Exercise): void => {
+    setEditingId(ex.id)
+    setName(ex.name)
+    setInstructions(ex.instructions)
+    setTargetKind(ex.target.kind)
+    setTargetValue(ex.target.kind === 'reps' ? ex.target.reps : ex.target.seconds)
+    setSelected(new Set(ex.tags.map(normalizeTag)))
+    setImage(ex.image) // passed straight through; NOT re-validated via isSafeImage
+    setImageError(null)
+  }
+
+  const resetForm = (): void => {
+    setEditingId(null)
+    setName('')
+    setInstructions('')
+    setTargetValue(10)
+    setSelected(new Set())
+    setImage(PLACEHOLDER_IMAGE)
+    setImageError(null)
+  }
 
   const toggleTag = (tagName: string): void => {
     setSelected((prev) => {
@@ -66,19 +98,18 @@ export function ExerciseCatalog({ exercises, tags, eligibleIds, onAddExercise, o
       targetKind === 'reps'
         ? { kind: 'reps', reps: Math.floor(targetValue) }
         : { kind: 'time', seconds: Math.floor(targetValue) }
-    onAddExercise({
+    const existing = editingId ? exercises.find((x) => x.id === editingId) : undefined
+    const draft: ExerciseDraft = {
       name: name.trim(),
       instructions: instructions.trim(),
       target,
       image,
       tags: Array.from(selected),
-      custom: true,
-    })
-    setName('')
-    setInstructions('')
-    setTargetValue(10)
-    setSelected(new Set())
-    setImage(PLACEHOLDER_IMAGE)
+      custom: existing ? existing.custom : true,
+    }
+    if (editingId) onUpdateExercise(editingId, draft)
+    else onAddExercise(draft)
+    resetForm()
   }
 
   const mint = (): void => {
@@ -94,12 +125,29 @@ export function ExerciseCatalog({ exercises, tags, eligibleIds, onAddExercise, o
       <h2 className="panel__title">Exercises</h2>
 
       <ul className="list">
-        {exercises.map((ex) => (
-          <li key={ex.id}>
-            {ex.name} — {formatTarget(ex.target)}
-            {eligibleIds.has(ex.id) && ' ✓ eligible'}
-          </li>
-        ))}
+        {exercises
+          .filter((ex) => !ex.deleted)
+          .map((ex) => (
+            <li key={ex.id}>
+              <img className="catalog__image" src={ex.image} alt="" width={48} height={48} />
+              <span>
+                {ex.name} — {formatTarget(ex.target)}
+                {eligibleIds.has(ex.id) && ' ✓ eligible'}
+              </span>
+              <button type="button" className="btn" onClick={() => startEdit(ex)}>
+                Edit
+              </button>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  if (window.confirm(`Delete "${ex.name}"?`)) onDeleteExercise(ex.id)
+                }}
+              >
+                Delete
+              </button>
+            </li>
+          ))}
       </ul>
 
       <form onSubmit={submit} aria-label="Add custom exercise">
@@ -179,8 +227,13 @@ export function ExerciseCatalog({ exercises, tags, eligibleIds, onAddExercise, o
         </fieldset>
 
         <button type="submit" className="btn btn--primary">
-          Add exercise
+          {editingId ? 'Save changes' : 'Add exercise'}
         </button>
+        {editingId && (
+          <button type="button" className="btn" onClick={resetForm}>
+            Cancel
+          </button>
+        )}
       </form>
     </section>
   )
