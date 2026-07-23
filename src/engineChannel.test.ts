@@ -11,6 +11,7 @@ const newIdMock = vi.mocked(newId)
 const ELECTION_MS = 500
 const FAILOVER_MS = 6000
 const RETRY_MS = 1000
+const HEARTBEAT_MS = 2000
 
 type Listener = (e: MessageEvent) => void
 
@@ -194,11 +195,41 @@ describe('createEngineChannel snooze adoption', () => {
   })
 })
 
+describe('createEngineChannel schedule broadcast', () => {
+  it('posts a schedule to a peer onSchedule and re-posts the cached value on heartbeat', () => {
+    ids = ['a', 'b']
+    const received: (number | null)[] = []
+    const a = createEngineChannel({})
+    const b = createEngineChannel({ onSchedule: (msg) => received.push(msg.nextFireAt) })
+    vi.advanceTimersByTime(ELECTION_MS + 10)
+    expect(a.isLeader()).toBe(true)
+
+    a.broadcastSchedule(4242)
+    expect(received).toEqual([4242])
+
+    // The leader re-broadcasts the cached schedule each heartbeat (~2s) so a tab
+    // that joins mid-interval still learns the pending fire time.
+    vi.advanceTimersByTime(HEARTBEAT_MS + 10)
+    expect(received.length).toBeGreaterThanOrEqual(2)
+    expect(received[received.length - 1]).toBe(4242)
+
+    a.close()
+    b.close()
+  })
+})
+
 describe('createEngineChannel shim', () => {
   it('reports isLeader() === true when BroadcastChannel is unavailable', () => {
     vi.stubGlobal('BroadcastChannel', undefined)
     const channel = createEngineChannel({})
     expect(channel.isLeader()).toBe(true)
     expect(() => channel.close()).not.toThrow()
+  })
+
+  it('broadcastSchedule is a safe no-op when BroadcastChannel is unavailable', () => {
+    vi.stubGlobal('BroadcastChannel', undefined)
+    const channel = createEngineChannel({})
+    expect(() => channel.broadcastSchedule(123)).not.toThrow()
+    expect(() => channel.broadcastSchedule(null)).not.toThrow()
   })
 })

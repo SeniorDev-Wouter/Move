@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Exercise, MoveState, ReminderAction } from '../types'
-import type { ActionMsg, EngineChannel, SnoozeMsg } from '../engineChannel'
+import type { ActionMsg, EngineChannel, ScheduleMsg, SnoozeMsg } from '../engineChannel'
 import { eligiblePool, selectNext } from '../selection'
 import { createEngineChannel } from '../engineChannel'
 import { fireReminder, requestPermission } from '../notifications'
@@ -51,6 +51,7 @@ export function useReminderEngine(props: ReminderEngineProps) {
 
   const [running, setRunning] = useState(false)
   const [current, setCurrentState] = useState<CurrentReminder | null>(null)
+  const [nextFireAt, setNextFireAt] = useState<number | null>(null)
 
   // Mutable mirrors so timer/channel callbacks always see the latest values.
   const stateRef = useRef(state)
@@ -68,7 +69,9 @@ export function useReminderEngine(props: ReminderEngineProps) {
   const currentRef = useRef<CurrentReminder | null>(null)
   const lastIdRef = useRef<string | undefined>(undefined)
   const tickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const nextTickAtRef = useRef<number | null>(null)
   const snoozeTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>())
+  const snoozeFireAtsRef = useRef(new Map<string, { exerciseId: string; fireAt: number }>())
   const channelRef = useRef<EngineChannel | null>(null)
 
   const setCurrent = useCallback((c: CurrentReminder | null) => {
@@ -76,17 +79,32 @@ export function useReminderEngine(props: ReminderEngineProps) {
     setCurrentState(c)
   }, [])
 
+  // Recompute the earliest scheduled fire time (interval tick or an armed
+  // snooze), publish it to render state, and — only on the leader — broadcast it
+  // so follower tabs mirror it.
+  const publishSchedule = useCallback(() => {
+    let value = nextTickAtRef.current
+    for (const { fireAt } of snoozeFireAtsRef.current.values()) {
+      if (value == null || fireAt < value) value = fireAt
+    }
+    setNextFireAt(value)
+    if (channelRef.current?.isLeader()) channelRef.current.broadcastSchedule(value)
+  }, [])
+
   const clearTick = useCallback(() => {
     if (tickTimerRef.current !== null) {
       clearTimeout(tickTimerRef.current)
       tickTimerRef.current = null
     }
+    nextTickAtRef.current = null
   }, [])
 
   const clearSnoozeTimers = useCallback(() => {
     for (const timer of snoozeTimersRef.current.values()) clearTimeout(timer)
     snoozeTimersRef.current.clear()
-  }, [])
+    snoozeFireAtsRef.current.clear()
+    publishSchedule()
+  }, [publishSchedule])
 
   const fire = useCallback((exercise: Exercise, occurrenceId: string) => {
     lastIdRef.current = exercise.id
@@ -102,15 +120,25 @@ export function useReminderEngine(props: ReminderEngineProps) {
     const existing = timers.get(key)
     if (existing) clearTimeout(existing)
     const occurrenceId = newId()
+    snoozeFireAtsRef.current.set(key, { exerciseId, fireAt })
     const timer = setTimeout(() => {
       timers.delete(key)
-      if (!runningRef.current || !channelRef.current?.isLeader()) return
+      snoozeFireAtsRef.current.delete(key)
+      if (!runningRef.current || !channelRef.current?.isLeader()) {
+        publishSchedule()
+        return
+      }
       const exercise = stateRef.current.exercises.find((e) => e.id === exerciseId)
-      if (!exercise) return
+      if (!exercise || exercise.deleted) {
+        publishSchedule()
+        return
+      }
       fire(exercise, occurrenceId)
+      publishSchedule()
     }, clampDelay(fireAt - Date.now()))
     timers.set(key, timer)
-  }, [fire])
+    publishSchedule()
+  }, [fire, publishSchedule])
 
   // Apply a state transition. LEADER-ONLY caller. Only touches `current` when the
   // occurrenceId matches the active reminder (a stale action never dismisses an
@@ -146,6 +174,7 @@ export function useReminderEngine(props: ReminderEngineProps) {
   const scheduleTick = useCallback(() => {
     clearTick()
     const delay = clampDelay(stateRef.current.settings.intervalMinutes * 60_000)
+    nextTickAtRef.current = Date.now() + delay
     tickTimerRef.current = setTimeout(() => {
       tickTimerRef.current = null
       if (!runningRef.current || !channelRef.current?.isLeader()) return
@@ -162,7 +191,8 @@ export function useReminderEngine(props: ReminderEngineProps) {
       trimRef.current()
       scheduleTick()
     }, delay)
-  }, [clearTick, fire])
+    publishSchedule()
+  }, [clearTick, fire, publishSchedule])
 
   // Records the action in ANY tab, then either applies the transition (leader) or
   // relays it to the leader (non-leader does nothing else).
@@ -196,7 +226,8 @@ export function useReminderEngine(props: ReminderEngineProps) {
     clearTick()
     clearSnoozeTimers()
     setCurrent(null)
-  }, [clearTick, clearSnoozeTimers, setCurrent])
+    publishSchedule()
+  }, [clearTick, clearSnoozeTimers, setCurrent, publishSchedule])
 
   // Cross-tab coordination. Handlers relay to the stable refs so leadership
   // changes resume/pause the loop without re-subscribing.
@@ -204,6 +235,7 @@ export function useReminderEngine(props: ReminderEngineProps) {
     const channel = createEngineChannel({
       onBecomeLeader: () => {
         if (runningRef.current) scheduleTick()
+        publishSchedule()
       },
       onLoseLeader: () => {
         clearTick()
@@ -215,14 +247,23 @@ export function useReminderEngine(props: ReminderEngineProps) {
           occurrenceId: msg.occurrenceId,
           exerciseId: msg.exerciseId,
         }),
-      onAdoptSnooze: (msg: SnoozeMsg) => armSnooze(msg.key, msg.exerciseId, msg.fireAt),
+      onAdoptSnooze: (msg: SnoozeMsg) => {
+        const exercise = stateRef.current.exercises.find((e) => e.id === msg.exerciseId)
+        if (!exercise || exercise.deleted) return
+        armSnooze(msg.key, msg.exerciseId, msg.fireAt)
+      },
+      // Followers mirror the leader's authoritative value; the leader ignores
+      // inbound schedule messages (its local computation wins).
+      onSchedule: (msg: ScheduleMsg) => {
+        if (!channelRef.current?.isLeader()) setNextFireAt(msg.nextFireAt)
+      },
     })
     channelRef.current = channel
     return () => {
       channel.close()
       channelRef.current = null
     }
-  }, [applyTransition, armSnooze, clearSnoozeTimers, clearTick, scheduleTick])
+  }, [applyTransition, armSnooze, clearSnoozeTimers, clearTick, publishSchedule, scheduleTick])
 
   // Drain SW-queued notification actions. The SW replays them as 'reminder-action'
   // messages after main.tsx posts 'client-ready'.
@@ -243,11 +284,37 @@ export function useReminderEngine(props: ReminderEngineProps) {
     return () => sw.removeEventListener('message', onMessage)
   }, [])
 
+  // Soft-delete disarm: dismiss the on-screen reminder if its exercise is now
+  // missing/deleted, and drop any armed snooze (timer + fireAt) for a
+  // missing/deleted exercise so no phantom fire time lingers.
+  useEffect(() => {
+    const byId = new Map(state.exercises.map((e) => [e.id, e]))
+    const cur = currentRef.current
+    if (cur) {
+      const ex = byId.get(cur.exercise.id)
+      if (!ex || ex.deleted) setCurrent(null)
+    }
+    let changed = false
+    for (const [key, meta] of snoozeFireAtsRef.current) {
+      const ex = byId.get(meta.exerciseId)
+      if (!ex || ex.deleted) {
+        const t = snoozeTimersRef.current.get(key)
+        if (t) {
+          clearTimeout(t)
+          snoozeTimersRef.current.delete(key)
+        }
+        snoozeFireAtsRef.current.delete(key)
+        changed = true
+      }
+    }
+    if (changed) publishSchedule()
+  }, [state.exercises, setCurrent, publishSchedule])
+
   // Final safety net: clear any outstanding timers on unmount.
   useEffect(() => () => {
     clearTick()
     clearSnoozeTimers()
   }, [clearTick, clearSnoozeTimers])
 
-  return { running, current, start, stop, handleAction }
+  return { running, current, nextFireAt, start, stop, handleAction }
 }
