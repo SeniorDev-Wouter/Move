@@ -6,7 +6,7 @@
 export function playDing(): void {
   if (typeof Audio === 'undefined') return
   try {
-    const audio = new Audio('/ding.wav')
+    const audio = new Audio(`${import.meta.env.BASE_URL}ding.wav`)
     void audio.play().catch(() => {})
   } catch {
     // Audio unavailable — ignore.

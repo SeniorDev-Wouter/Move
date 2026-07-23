@@ -4,6 +4,12 @@ const CACHE_NAME = 'move-v1'
 const QUEUE_CACHE_NAME = 'move-queue-v1'
 const QUEUE_URL = '/__queued-actions__'
 
+// The SW is registered with a scope of the app's base path (e.g. '/' at a
+// domain root, '/move/' on a GitHub Pages project site). Derive it so the
+// navigation fallback, hashed-asset check, and openWindow all resolve under
+// the base rather than the origin root.
+const BASE = new URL(self.registration.scope).pathname
+
 self.addEventListener('install', () => {
   self.skipWaiting()
 })
@@ -27,7 +33,7 @@ function isNavigationRequest(request) {
 }
 
 function isHashedAsset(url) {
-  return url.pathname.startsWith('/assets/')
+  return url.pathname.startsWith(`${BASE}assets/`)
 }
 
 async function networkFirst(request) {
@@ -37,7 +43,7 @@ async function networkFirst(request) {
     cache.put(request, response.clone())
     return response
   } catch {
-    return (await cache.match(request)) || (await cache.match('/'))
+    return (await cache.match(request)) || (await cache.match(BASE))
   }
 }
 
@@ -124,7 +130,7 @@ self.addEventListener('notificationclick', (event) => {
       }
 
       await enqueueAction(payload)
-      await self.clients.openWindow('/')
+      await self.clients.openWindow(BASE)
     })(),
   )
 })

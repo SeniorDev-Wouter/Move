@@ -10,8 +10,9 @@ createRoot(document.getElementById('root')!).render(
 )
 
 if ('serviceWorker' in navigator) {
+  const base = import.meta.env.BASE_URL
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {})
+    navigator.serviceWorker.register(`${base}sw.js`, { scope: base }).catch(() => {})
   })
   navigator.serviceWorker.ready
     .then((reg) => {

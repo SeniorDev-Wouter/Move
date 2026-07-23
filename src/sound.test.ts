@@ -9,7 +9,7 @@ describe('playDing', () => {
     expect(() => playDing()).not.toThrow()
   })
 
-  it("constructs '/ding.wav' and swallows a rejected play()", async () => {
+  it("constructs the base-relative 'ding.wav' and swallows a rejected play()", async () => {
     let src: string | undefined
     class FakeAudio {
       constructor(source?: string) {
@@ -22,7 +22,7 @@ describe('playDing', () => {
     vi.stubGlobal('Audio', FakeAudio)
 
     expect(() => playDing()).not.toThrow()
-    expect(src).toBe('/ding.wav')
+    expect(src?.endsWith('ding.wav')).toBe(true)
     // Let the rejected play() settle; the .catch() must swallow it.
     await Promise.resolve()
   })
