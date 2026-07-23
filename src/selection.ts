@@ -38,7 +38,7 @@ export function isEligible(ex: Exercise, state: MoveState, loadout: Loadout): bo
 
 export function eligiblePool(state: MoveState): Exercise[] {
   const loadout = resolveActiveLoadout(state)
-  return state.exercises.filter((ex) => isEligible(ex, state, loadout))
+  return state.exercises.filter((ex) => !ex.deleted && isEligible(ex, state, loadout))
 }
 
 /**
