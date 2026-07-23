@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useMove } from './hooks/useMove'
 import { useReminderEngine } from './hooks/useReminderEngine'
 import { eligiblePool } from './selection'
-import { deriveStats } from './progress'
+import { deriveStats, deriveActivity } from './progress'
 import { RetroWindow } from './components/RetroWindow'
 import { Assistant } from './components/Assistant'
 import { SettingsPanel } from './components/SettingsPanel'
@@ -42,6 +42,31 @@ function App() {
   const stats = useMemo(
     () => deriveStats(move.state.rollup, move.state.history),
     [move.state.rollup, move.state.history],
+  )
+  const activity = useMemo(
+    () => deriveActivity(move.state.rollup, move.state.history),
+    [move.state.rollup, move.state.history],
+  )
+  const exerciseNameById = useMemo(
+    () => new Map(move.state.exercises.map((ex) => [ex.id, ex.name])),
+    [move.state.exercises],
+  )
+  const perExercise = useMemo(
+    () =>
+      activity.perExercise.map((p) => ({
+        name: exerciseNameById.get(p.exerciseId) ?? 'Removed exercise',
+        count: p.count,
+      })),
+    [activity, exerciseNameById],
+  )
+  const activityLog = useMemo(
+    () =>
+      activity.log.map((e) => ({
+        name: exerciseNameById.get(e.exerciseId) ?? 'Removed exercise',
+        action: e.action,
+        at: e.at,
+      })),
+    [activity, exerciseNameById],
   )
 
   const handleStart = (): void => {
@@ -86,7 +111,7 @@ function App() {
             onAddTag={move.addTag}
           />
 
-          <ProgressPanel stats={stats} />
+          <ProgressPanel stats={stats} perExercise={perExercise} log={activityLog} />
         </div>
 
         <section className="panel" aria-label="Eligible now">
