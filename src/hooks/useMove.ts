@@ -94,6 +94,26 @@ export function useMove() {
     }))
   }, [])
 
+  // Replace the matching exercise with the draft; explicit deleted: false clears any tombstone.
+  const updateExercise = useCallback((id: string, draft: ExerciseDraft) => {
+    setState((s) => ({
+      ...s,
+      exercises: s.exercises.map((ex) =>
+        ex.id === id ? { ...ex, ...draft, id, deleted: false, updatedAt: Date.now() } : ex,
+      ),
+    }))
+  }, [])
+
+  // Soft-delete: tombstone the exercise rather than removing it.
+  const deleteExercise = useCallback((id: string) => {
+    setState((s) => ({
+      ...s,
+      exercises: s.exercises.map((ex) =>
+        ex.id === id ? { ...ex, deleted: true, updatedAt: Date.now() } : ex,
+      ),
+    }))
+  }, [])
+
   // Dedupe by normalized name: an existing tag is replaced (axis + updatedAt).
   const addTag = useCallback((name: string, axis: TagAxis) => {
     setState((s) => {
@@ -150,6 +170,8 @@ export function useMove() {
     toggleEquipment,
     setActiveLoadout,
     addExercise,
+    updateExercise,
+    deleteExercise,
     addTag,
     saveLoadout,
     importBundle,
