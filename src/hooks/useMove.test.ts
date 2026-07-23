@@ -8,7 +8,7 @@ vi.mock('../storage', async (importOriginal) => {
   return { ...actual, saveState: vi.fn(actual.saveState) }
 })
 
-import { STORAGE_KEY, saveState } from '../storage'
+import { STORAGE_KEY, loadState, saveState } from '../storage'
 import { createDefaultState } from '../catalog'
 import { useMove } from './useMove'
 
@@ -71,5 +71,41 @@ describe('useMove', () => {
     })
     expect(entries[0].id).toBeTruthy()
     expect(entries[0].at).toBeGreaterThan(0)
+  })
+
+  it('updateExercise applies draft fields, bumps updatedAt, and clears a tombstone', () => {
+    const { result } = renderHook(() => useMove())
+    const before = result.current.state.exercises.find((e) => e.id === 'ex-neck-rolls')!
+    expect(before.updatedAt).toBe(0)
+
+    act(() => {
+      result.current.deleteExercise('ex-neck-rolls')
+    })
+    expect(result.current.state.exercises.find((e) => e.id === 'ex-neck-rolls')?.deleted).toBe(true)
+
+    act(() => {
+      result.current.updateExercise('ex-neck-rolls', { ...before, name: 'Neck Rolls (updated)' })
+    })
+
+    const after = result.current.state.exercises.find((e) => e.id === 'ex-neck-rolls')!
+    expect(after.name).toBe('Neck Rolls (updated)')
+    expect(after.deleted).toBe(false)
+    expect(after.updatedAt).toBeGreaterThan(before.updatedAt)
+  })
+
+  it('deleteExercise sets deleted: true and bumps updatedAt, persisting across reload', () => {
+    const { result } = renderHook(() => useMove())
+    const before = result.current.state.exercises.find((e) => e.id === 'ex-shoulder-shrugs')!
+
+    act(() => {
+      result.current.deleteExercise('ex-shoulder-shrugs')
+    })
+
+    const after = result.current.state.exercises.find((e) => e.id === 'ex-shoulder-shrugs')!
+    expect(after.deleted).toBe(true)
+    expect(after.updatedAt).toBeGreaterThan(before.updatedAt)
+
+    const reloaded = loadState()
+    expect(reloaded.exercises.find((e) => e.id === 'ex-shoulder-shrugs')?.deleted).toBe(true)
   })
 })
