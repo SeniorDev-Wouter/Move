@@ -108,6 +108,8 @@ function App() {
             tags={move.state.tags}
             eligibleIds={eligibleIds}
             onAddExercise={move.addExercise}
+            onUpdateExercise={move.updateExercise}
+            onDeleteExercise={move.deleteExercise}
             onAddTag={move.addTag}
           />
 
