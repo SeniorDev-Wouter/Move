@@ -9,18 +9,21 @@ export type ActionMsg = {
   actionEventId: string
 }
 export type SnoozeMsg = { type: 'snooze'; key: string; exerciseId: string; fireAt: number }
+export type ScheduleMsg = { type: 'schedule'; nextFireAt: number | null }
 
 export type EngineHandlers = {
   onBecomeLeader?: () => void
   onLoseLeader?: () => void
   onAction?: (msg: ActionMsg) => void // leader applies relayed actions
   onAdoptSnooze?: (msg: SnoozeMsg) => void // new leader adopts a still-future snooze
+  onSchedule?: (msg: ScheduleMsg) => void // followers mirror the leader's next fire time
 }
 
 export type EngineChannel = {
   isLeader: () => boolean
   relayAction: (a: Omit<ActionMsg, 'type' | 'actionEventId'>) => void
   broadcastSnooze: (s: Omit<SnoozeMsg, 'type'>) => void
+  broadcastSchedule: (nextFireAt: number | null) => void
   close: () => void
 }
 
@@ -34,6 +37,7 @@ type EngineMsg =
   | ReminderMsg
   | ActionMsg
   | SnoozeMsg
+  | ScheduleMsg
   | CandidacyMsg
   | HeartbeatMsg
   | ResignMsg
@@ -68,6 +72,7 @@ export function createEngineChannel(handlers: EngineHandlers): EngineChannel {
       isLeader: () => true,
       relayAction: () => {},
       broadcastSnooze: () => {},
+      broadcastSchedule: () => {},
       close: () => {},
     }
   }
@@ -85,6 +90,7 @@ export function createEngineChannel(handlers: EngineHandlers): EngineChannel {
   let failoverTimer: ReturnType<typeof setTimeout> | null = null
 
   const snoozes = new Map<string, SnoozeMsg>()
+  let lastSchedule: ScheduleMsg | null = null
   const processed = new Set<string>()
   const pending = new Map<string, { msg: ActionMsg; timer: ReturnType<typeof setInterval> }>()
 
@@ -152,7 +158,11 @@ export function createEngineChannel(handlers: EngineHandlers): EngineChannel {
     }
     pending.clear()
     post({ type: 'heartbeat', priority })
-    heartbeatTimer = setInterval(() => post({ type: 'heartbeat', priority }), HEARTBEAT_MS)
+    heartbeatTimer = setInterval(() => {
+      post({ type: 'heartbeat', priority })
+      // Re-broadcast the cached schedule so mid-interval joiners get it.
+      if (lastSchedule) post(lastSchedule)
+    }, HEARTBEAT_MS)
   }
 
   const startElection = (): void => {
@@ -220,6 +230,9 @@ export function createEngineChannel(handlers: EngineHandlers): EngineChannel {
       case 'snooze':
         snoozes.set(msg.key, msg)
         break
+      case 'schedule':
+        handlers.onSchedule?.(msg)
+        break
       default:
         break
     }
@@ -267,6 +280,13 @@ export function createEngineChannel(handlers: EngineHandlers): EngineChannel {
     post(msg)
   }
 
+  const broadcastSchedule = (nextFireAt: number | null): void => {
+    if (closed) return
+    const msg: ScheduleMsg = { type: 'schedule', nextFireAt }
+    lastSchedule = msg
+    post(msg)
+  }
+
   const close = (): void => {
     if (closed) return
     // Mark closed first so any re-entrant delivery of our own resign (a
@@ -297,5 +317,5 @@ export function createEngineChannel(handlers: EngineHandlers): EngineChannel {
 
   startElection()
 
-  return { isLeader: () => leader, relayAction, broadcastSnooze, close }
+  return { isLeader: () => leader, relayAction, broadcastSnooze, broadcastSchedule, close }
 }
